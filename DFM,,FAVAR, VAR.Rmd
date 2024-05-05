@@ -1,0 +1,495 @@
+---
+title: "Factor model(DFM,FAVAR), VAR"
+author: "Chloe Zhang"
+date: "2024-04-01"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+```{r}
+install.packages("readr")
+install.packages("dplyr")
+install.packages("lubridate")
+```
+
+
+```{r}
+# Load necessary libraries
+library(readr)
+library(dplyr)
+library(lubridate)
+
+# Read the CSV file into a data frame
+data <- read_csv('co2_weekly_mlo.csv')
+
+# Combine the 'year', 'month', and 'day' columns to create a 'date' column
+data <- data %>%
+  mutate(date = make_date(year, month, day))
+
+# Set the 'date' column as the index (row names in R)
+row.names(data) <- data$date
+
+# Check the first few rows of the data frame
+head(data)
+
+# Filter out the missing values
+data <- data %>%
+  filter(average != -999.99)
+
+# Select a subset of the data starting from the 1340th row (since R is 1-indexed)
+
+```
+
+```{r}
+install.packages('/Users/chloe/Downloads/Matrix_1.6-5.tar.gz', repos = NULL, type = "source")
+
+install.packages("Matrix")
+
+```
+
+```{r}
+install.packages("glmnet")
+install.packages("forecast")
+
+library(Matrix)
+library(glmnet)
+library(dplyr)
+library(lubridate)
+library(forecast)
+```
+
+
+```{r}
+# Assuming 'data' is already read and preprocessed as per your Python code
+
+# Split the data into training and testing sets
+train_data <- head(data, nrow(data) - 1)
+test_data <- tail(data, nrow(data) - length(train_data))
+
+# Setup the model - Assuming you are forecasting one step ahead and using 'p' lags
+p <- 13  # number of lags
+k <- ncol(train_data)  # number of components
+
+fit_var_lasso <- function(data, p) {
+  # Prepare the matrix of predictors with lagged values
+  x <- as.matrix(data)
+  
+  # Embed creates a new matrix where each row contains the lagged values of x
+  # We need to create lagged predictors and then remove the rows with NAs (the first 'p' rows)
+  x_lagged <- embed(x, p + 1) # This will create p lags
+  x_lagged <- x_lagged[-seq(p), -ncol(x_lagged)] # Remove the last column which is the current time step
+  
+  # y should be the response variable starting from time p+1 to the end
+  y <- x[(p + 1):nrow(x), ]
+
+  # Ensure x_lagged and y have the same number of rows
+  if (nrow(x_lagged) != nrow(y)) {
+    stop("Number of observations in y not equal to the number of rows of x")
+  }
+
+  # Fit the Lasso model to each variable in the system
+  model_list <- lapply(1:ncol(y), function(i) {
+    cv.glmnet(x_lagged, y[, i], alpha = 1)
+  })
+  
+  return(model_list)
+}
+
+
+
+# Forecast using VAR-Lasso
+forecast_var_lasso <- function(model_list, data, p) {
+  n <- nrow(data)
+  k <- length(model_list)
+  forecasts <- matrix(nrow = 1, ncol = k)
+  
+  # Create lagged matrix for the last observation
+  x_lagged <- as.matrix(data[(n-p+1):n, ])
+  x_lagged <- embed(x_lagged, p + 1)
+  x_lagged <- x_lagged[1, -(1:p)]
+  
+  # Forecast using each LASSO model
+  for (i in 1:k) {
+    prediction <- predict(model_list[[i]], newx = t(x_lagged), s = "lambda.min")
+    forecasts[1, i] <- prediction$fit
+  }
+  
+  return(forecasts)
+}
+
+# Calculate MSFE
+calculate_msfe <- function(actual, forecast, k) {
+  squared_errors <- (forecast - actual)^2
+  msfe <- sum(squared_errors) / (k * (nrow(actual)))
+  return(msfe)
+}
+```
+
+
+```{r}
+# Perform 250 simulations
+set.seed(123)  # For reproducibility
+msfe_results <- replicate(250, {
+  # Fit the VAR-Lasso model
+  var_lasso_models <- fit_var_lasso(train_data, p)
+  
+  # Perform forecasting
+  forecasted_values <- forecast_var_lasso(var_lasso_models, test_data, p)
+  
+  # Compute MSFE
+  msfe <- calculate_msfe(test_data, forecasted_values, k)
+  
+  return(msfe)
+})
+
+# Compute the mean MSFE over 250 simulations
+mean_msfe <- mean(msfe_results)
+print(mean_msfe)
+
+```
+
+
+
+
+
+```{r}
+setwd("/Users/chloe/HLAG/code/Simulation/Forecast")
+getwd()
+```
+
+```{r}
+#### R-script Simulation Study : Measuring Forecast Accuracy for Factor Models, AR and VAR(1) benchmark ####
+rm(list=ls())
+```
+
+
+```{r}
+#### Check packages installed ####
+checkpackage<-function(U){
+  if((U %in% rownames(installed.packages()))==F){
+    install.packages(U)
+    library(U, character.only = TRUE)
+  }else{
+    library(U, character.only = TRUE)
+  }
+}
+packagelist<-list("lattice", "Rcpp", "MASS","methods", "zoo", "stats","utils","grDevices",
+                  "graphics","RcppArmadillo", "RcppEigen", "R.matlab", "vars", "bigtime")
+lapply(packagelist,checkpackage)
+```
+
+
+```{r}
+#### Source Functions ####
+source("factorfunctions.R") # factor functions
+
+  oldw <- getOption("warn")
+  options(warn = -1)
+```
+
+
+```{r}
+data_1000 = data[8:nrow(data),]
+Nism = 
+
+```
+
+
+```{r}
+##############################################################
+#### Simulation Scenario 1 : COmponentwise HLag Structure ####
+##############################################################
+
+#### Setting ####
+p=5 # p the maximal lag order
+k=45 # k is the number of series
+n=129 # n is the time series length. We ran the simulations for both n=100 and n=200
+Nsim=20
+#### Forecast Performance ####
+Sim1MSFE <- matrix(NA, ncol=3, nrow=Nsim) # Note : VAR1 is already contained in the other file 
+colnames(Sim1MSFE) <- c("DFM", "FAVAR", "VAR")
+datasim1 <- read.table("sim1dat.txt")
+#library(bigtime) # for AR model
+```
+
+```{r}
+
+for(r in 1:Nsim){
+  # Data
+  Y <- data_1000[((n)*(r-1)+1):(r*n),5 ]
+
+  # DFM
+  SFMfit <- SFM(Y = as.matrix(Y[-nrow(Y), ]), horizon = 1)
+  DFMfit <- DFM(Y = as.matrix(Y[-nrow(Y), ]), f = SFMfit$f, rank = SFMfit$rank, horizon = 1, 
+                lag.max = p, Yhat_static = SFMfit$Yhat_static,  decomp = SFMfit$decomp) 
+  MSFEs_DFM <- (Y[nrow(Y), ] - DFMfit$Yhat_dynamic_AIC)^2
+  
+  Sim1MSFE[r, 1] <- mean(as.numeric(MSFEs_DFM))
+
+}
+
+#apply(Sim1MSFE, 2, mean)
+
+```
+
+```{r}
+for(r in 1:Nsim){
+  # Data
+  Y <- datasim1[((n)*(r-1)+1):(r*n), ]
+  
+  # FAVAR
+  FAVARfit <- FAVAR(Y = as.matrix(Y[-nrow(Y), ]), horizon = 1, lag.max = p)
+  MSFEs_FAVAR <- (Y[nrow(Y), ] - FAVARfit$YhatsAIC)^2
+  Sim1MSFE[r, 2] <- mean(as.numeric(MSFEs_FAVAR))
+}
+```
+
+
+```{r}
+for(r in 1:Nsim){
+  # Data
+  Y <- data_1000[((n)*(r-1)+1):(r*n), ]
+
+  # VAR estimation
+  VARfit <- VAR(y = Y[-nrow(Y),], type = "none")
+  VARpredict <- predict(VARfit, n.ahead = 1)
+  collectresults <- matrix(unlist(VARpredict$fcst), nrow = k, ncol = 4, byrow = T)
+  VARforecast <- collectresults[,1]
+  MSFEs_var <- (Y[nrow(Y), ] - VARforecast)^2
+
+  Sim1MSFE[r, 3] <- mean(as.numeric(MSFEs_var))
+
+}
+```
+
+
+```{r}
+apply(Sim1MSFE, 2, mean)
+```
+```{r}
+max_col1 <- max(Sim1MSFE[, 1])
+min_col1 <- min(Sim1MSFE[, 1])
+
+# 计算第二列的最大值、最小值
+max_col2 <- max(Sim1MSFE[, 2])
+min_col2 <- min(Sim1MSFE[, 2])
+
+max_col3 <- max(Sim1MSFE[, 3])
+min_col3 <- min(Sim1MSFE[, 3])
+
+```
+
+
+```{r}
+##########################################################
+#### Simulation Scenario 2 : Own-Other HLag Structure ####
+##########################################################
+
+#### Setting ####
+k=45;p=3;n=100
+Nsim <- 250 # Number of simulations
+```
+
+
+```{r}
+#### Forecast Performance ####
+Sim2MSFE <- matrix(NA, ncol=3, nrow=Nsim) # Note : VAR1 is already contained in the other file 
+colnames(Sim2MSFE) <- c("DFM", "FAVAR", "VAR")
+datasim2 <- read.table("sim2dat.txt")
+library(bigtime)
+
+for(r in 1:Nsim){
+  # Data
+  Y <- datasim2[((n)*(r-1)+1):(r*n), ]
+  
+  # DFM
+  SFMfit <- SFM(Y = as.matrix(Y[-nrow(Y), ]), horizon = 1)
+  DFMfit <- DFM(Y = as.matrix(Y[-nrow(Y), ]), f = SFMfit$f, rank = SFMfit$rank, horizon = 1, 
+                lag.max = p, Yhat_static = SFMfit$Yhat_static,  decomp = SFMfit$decomp) 
+  MSFEs_DFM <- (Y[nrow(Y), ] - DFMfit$Yhat_dynamic_AIC)^2
+  
+  # FAVAR
+  FAVARfit <- FAVAR(Y = as.matrix(Y[-nrow(Y), ]), horizon = 1, lag.max = p)
+  MSFEs_FAVAR <- (Y[nrow(Y), ] - FAVARfit$YhatsAIC)^2
+  
+  
+  
+  Sim2MSFE[r, 1] <- mean(as.numeric(MSFEs_DFM))
+  Sim2MSFE[r, 2] <- mean(as.numeric(MSFEs_FAVAR))
+}
+#apply(Sim2MSFE, 2, mean)
+```
+
+```{r}
+for(r in 1:Nsim){
+  # Data
+  Y <- datasim2[((n)*(r-1)+1):(r*n), ]
+
+  # VAR estimation
+  VARfit <- VAR(y = Y[-nrow(Y),], type = "none")
+  VARpredict <- predict(VARfit, n.ahead = 1)
+  collectresults <- matrix(unlist(VARpredict$fcst), nrow = k, ncol = 4, byrow = T)
+  VARforecast <- collectresults[,1]
+  MSFEs_var <- (Y[nrow(Y), ] - VARforecast)^2
+
+  Sim2MSFE[r, 3] <- mean(as.numeric(MSFEs_var))
+
+}
+
+```
+
+
+```{r}
+apply(Sim2MSFE, 2, mean)
+```
+
+```{r}
+max_col2.1 <- max(Sim2MSFE[, 1])
+min_col2,1 <- min(Sim2MSFE[, 1])
+
+# 计算第二列的最大值、最小值
+max_col2.2 <- max(Sim2MSFE[, 2])
+min_col2.2 <- min(Sim2MSFE[, 2])
+```
+
+
+
+
+```{r}
+############################################################
+#### Simulation Scenario 3 : Elementwise HLag Structure ####
+############################################################
+
+#### Setting ####
+k=45;p=4;n=100
+Nsim <- 250 # Number of simulations
+
+#### Forecast Performance ####
+Sim3MSFE <- matrix(NA, ncol=3, nrow=Nsim) # Note : VAR1 is already contained in the other file 
+colnames(Sim3MSFE) <- c("DFM", "FAVAR","VAR")
+datasim3 <- read.table("sim3dat.txt")
+#library(bigtime)
+
+for(r in 1:Nsim){
+  # Data
+  Y <- datasim3[((n)*(r-1)+1):(r*n), ]
+  
+  # DFM
+  SFMfit <- SFM(Y = as.matrix(Y[-nrow(Y), ]), horizon = 1)
+  DFMfit <- DFM(Y = as.matrix(Y[-nrow(Y), ]), f = SFMfit$f, rank = SFMfit$rank, horizon = 1, 
+                lag.max = p, Yhat_static = SFMfit$Yhat_static,  decomp = SFMfit$decomp) 
+  MSFEs_DFM <- (Y[nrow(Y), ] - DFMfit$Yhat_dynamic_AIC)^2
+  
+  # FAVAR
+  FAVARfit <- FAVAR(Y = as.matrix(Y[-nrow(Y), ]), horizon = 1, lag.max = p)
+  MSFEs_FAVAR <- (Y[nrow(Y), ] - FAVARfit$YhatsAIC)^2
+  
+
+  
+  Sim3MSFE[r, 1] <- mean(as.numeric(MSFEs_DFM))
+  Sim3MSFE[r, 2] <- mean(as.numeric(MSFEs_FAVAR))
+}
+```
+
+```{r}
+for(r in 1:Nsim){
+  # Data
+  Y <- datasim3[((n)*(r-1)+1):(r*n), ]
+
+  # VAR estimation
+  VARfit <- VAR(y = Y[-nrow(Y),], type = "none")
+  VARpredict <- predict(VARfit, n.ahead = 1)
+  collectresults <- matrix(unlist(VARpredict$fcst), nrow = k, ncol = 4, byrow = T)
+  VARforecast <- collectresults[,1]
+  MSFEs_var <- (Y[nrow(Y), ] - VARforecast)^2
+
+  Sim3MSFE[r, 3] <- mean(as.numeric(MSFEs_var))
+
+}
+```
+
+
+```{r}
+apply(Sim3MSFE, 2, mean)
+```
+
+
+```{r}
+######################################################
+#### Simulation Scenario 4 : Data-based Structure ####
+######################################################
+
+#### Setting ####
+k <- 40; p <- 4; n=100
+Nsim <- 250 # Number of simulations
+```
+
+
+```{r}
+#### Forecast Performance ####
+Sim4MSFE <- matrix(NA, ncol=3, nrow=Nsim) # Note : VAR1 is already contained in the other file 
+colnames(Sim4MSFE) <- c("DFM", "FAVAR", "VAR")
+datasim4 <- read.table("sim4dat.txt")
+library(bigtime)
+
+for(r in 1:Nsim){
+  # Data
+  Y <- datasim4[((n)*(r-1)+1):(r*n), ]
+  
+  # DFM
+  SFMfit <- SFM(Y = as.matrix(Y[-nrow(Y), ]), horizon = 1)
+  DFMfit <- DFM(Y = as.matrix(Y[-nrow(Y), ]), f = SFMfit$f, rank = SFMfit$rank, horizon = 1, 
+                lag.max = p, Yhat_static = SFMfit$Yhat_static,  decomp = SFMfit$decomp) 
+  MSFEs_DFM <- (Y[nrow(Y), ] - DFMfit$Yhat_dynamic_AIC)^2
+  
+  Sim4MSFE[r, 1] <- mean(as.numeric(MSFEs_DFM))
+}
+#apply(Sim4MSFE, 2, mean)
+```
+
+
+```{r}
+
+for(r in 1:Nsim){
+  # Data
+  Y <- datasim4[((n)*(r-1)+1):(r*n), ]
+
+  # FAVAR
+  FAVARfit <- FAVAR(Y = as.matrix(Y[-nrow(Y), ]), horizon = 1, lag.max = p)
+  MSFEs_FAVAR <- (Y[nrow(Y), ] - FAVARfit$YhatsAIC)^2
+  
+  Sim4MSFE[r, 2] <- mean(as.numeric(MSFEs_FAVAR))
+}
+```
+
+
+```{r}
+for(r in 1:Nsim){
+  # Data
+  Y <- datasim4[((n)*(r-1)+1):(r*n), ]
+
+  # VAR estimation
+  VARfit <- VAR(y = Y[-nrow(Y),], type = "none")
+  VARpredict <- predict(VARfit, n.ahead = 1)
+  collectresults <- matrix(unlist(VARpredict$fcst), nrow = k, ncol = 4, byrow = T)
+  VARforecast <- collectresults[,1]
+  MSFEs_var <- (Y[nrow(Y), ] - VARforecast)^2
+  
+  Sim4MSFE[r, 3] <- mean(as.numeric(MSFEs_var))
+}
+
+```
+
+```{r}
+apply(Sim4MSFE, 2, mean)
+```
+
+
+
+
+
+
+
+
+
